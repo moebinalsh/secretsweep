@@ -66,7 +66,7 @@ router.post('/connect', extractUser, requireAdmin, validate(connectSchema), asyn
   } catch (err) {
     logger.error('GitHub connect error:', err);
     if (err.message?.includes('GitHub API error')) {
-      return res.status(401).json({ error: 'Invalid GitHub token. Ensure it has repo and read:org scopes.' });
+      return res.status(401).json({ error: 'Invalid GitHub token. For classic tokens: repo + read:org scopes. For fine-grained tokens: Contents + Metadata read access.' });
     }
     res.status(500).json({ error: 'Failed to connect GitHub' });
   }

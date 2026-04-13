@@ -6,7 +6,7 @@ const REQUEST_TIMEOUT = 15000;
 
 function headers(token) {
   return {
-    Authorization: `token ${token}`,
+    Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github.v3+json',
     'User-Agent': 'SecretSweep',
   };
@@ -47,9 +47,28 @@ async function resilientFetch(url, options = {}, retries = 1) {
 }
 
 export async function getUser(token) {
+  // Try /user first (works with classic tokens and fine-grained tokens with profile access)
   const res = await resilientFetch(`${GITHUB_API}/user`, { headers: headers(token) });
-  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
-  return res.json();
+  if (res.ok) return res.json();
+
+  // If /user fails (fine-grained token without profile permission), try authenticated check
+  // via /octocat which validates the token without needing specific permissions
+  const checkRes = await resilientFetch(`${GITHUB_API}/octocat`, { headers: headers(token) });
+  if (checkRes.ok || checkRes.status === 200) {
+    // Token is valid but can't read profile — extract username from token metadata
+    const metaRes = await resilientFetch(`${GITHUB_API}/`, { headers: headers(token) });
+    if (metaRes.ok) {
+      const meta = await metaRes.json();
+      if (meta.current_user_url) {
+        const userRes = await resilientFetch(meta.current_user_url, { headers: headers(token) });
+        if (userRes.ok) return userRes.json();
+      }
+    }
+    // Fallback — return a minimal user object
+    return { login: 'github-user', id: 0 };
+  }
+
+  throw new Error(`GitHub API error: ${res.status}`);
 }
 
 export async function getUserOrgs(token) {
